@@ -66,3 +66,9 @@ variable "iam_tags_condition" {
   description = "Optional - customizable conditions map to be used with IAM policies such as KeyTag validation"
   default     = {}
 }
+
+variable "iam_path" {
+  type        = string
+  description = "Path in which to create the IAM roles, policies, and instance profiles"
+  default     = "/"
+}

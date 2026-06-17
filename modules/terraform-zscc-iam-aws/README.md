@@ -13,7 +13,7 @@ This module creates IAM Policies, Roles, and Instance Profile resources required
 | CCAllowCloudWatchMetricsRW | Required | [<br/>"cloudwatch:PutMetricData"<br/>]|condition {<br/>test = "StringEquals"<br/>variable = "cloudwatch:namespace"<br/>values =["Zscaler/CloudConnectors"]<br/>}| ASG | Policy which permits CCs to send custom metrics to CloudWatch|
 | CCAllowCloudWatchMetricsRO | Required | [<br/>"cloudwatch:GetMetricStatistics",<br/>"cloudwatch:ListMetrics"<br/>]| <center>["*"]</center>| ASG | Policy which permits CCs to send custom metrics to CloudWatch|
 | CCAllowEC2DescribeTags | Required | [<br/>"ec2:DescribeTags"<br/>]| <center>["*"]</center> | ASG | Policy which permits CCs to send custom metrics to CloudWatch|
-| CCAllowTags | Optional | [<br/>"sns:ListTopics",<br/>"sns:ListSubscriptions",<br/>"sns:Subscribe",<br/>"sns:Unsubscribe",<br/>"sqs:CreateQueue",<br/>"sqs:DeleteQueue"<br/>]| <center>["*"]</center> | Both | Policy which permits CCs to subscribe for tags changes|
+| CCAllowTags | Optional | [<br/>"sns:ListTopics",<br/>"sns:ListSubscriptions",<br/>"sns:Subscribe",<br/>"sns:Unsubscribe",<br/>"sqs:CreateQueue",<br/>"sqs:DeleteQueue",<br/>"iam:GetRole"<br/>]| <center>["*"] for SQS/SNS,<br/>[CC role ARNs] for IAM</center> | Both | Policy which permits CCs to subscribe for tags changes and retrieve role ARN instance profiles|
 
 
 <!-- BEGINNING OF PRE-COMMIT-TERRAFORM DOCS HOOK -->

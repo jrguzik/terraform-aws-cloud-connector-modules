@@ -4,6 +4,14 @@
 
 
 ################################################################################
+# Retrieve current AWS account and partition dynamically
+################################################################################
+data "aws_caller_identity" "current" {}
+
+data "aws_partition" "current" {}
+
+
+################################################################################
 # Define AssumeRole access for EC2
 ################################################################################
 data "aws_iam_policy_document" "instance_assume_role_policy" {
@@ -44,6 +52,7 @@ resource "aws_iam_policy" "cc_get_secrets_policy" {
   count       = var.byo_iam == false ? var.iam_count : 0
   description = "Policy which permits CCs to retrieve and decrypt the encrypted data from Secrets Manager"
   name        = "${var.name_prefix}-cc-${count.index + 1}-get-secrets-${var.resource_tag}"
+  path        = var.iam_path
   policy      = data.aws_iam_policy_document.cc_get_secrets_policy_document.json
 }
 
@@ -79,6 +88,7 @@ resource "aws_iam_policy" "cc_session_manager_policy" {
   count       = var.byo_iam == false ? var.iam_count : 0
   description = "Policy which permits CCs to register to SSM Manager for Console Connect functionality"
   name        = "${var.name_prefix}-cc-${count.index + 1}-ssm-${var.resource_tag}"
+  path        = var.iam_path
   policy      = data.aws_iam_policy_document.cc_session_manager_policy_document.json
 }
 
@@ -122,6 +132,7 @@ resource "aws_iam_policy" "cc_autoscale_lifecycle_policy" {
   count       = var.byo_iam == false && var.asg_enabled == true ? var.iam_count : 0
   description = "Policy which permits CCs to send lifecycle actions when hook is enabled"
   name        = "${var.name_prefix}-cc-${count.index + 1}-aslc-${var.resource_tag}"
+  path        = var.iam_path
   policy      = data.aws_iam_policy_document.cc_autoscale_lifecycle_policy_document.json
 }
 
@@ -175,6 +186,7 @@ resource "aws_iam_policy" "cc_metrics_policy" {
   count       = var.byo_iam == false ? var.iam_count : 0
   description = "Policy which permits CCs to send custom metrics to CloudWatch"
   name        = "${var.name_prefix}-cc-${count.index + 1}-metrics-${var.resource_tag}"
+  path        = var.iam_path
   policy      = data.aws_iam_policy_document.cc_metrics_policy_document.json
 }
 
@@ -213,12 +225,24 @@ data "aws_iam_policy_document" "cc_tags_policy_document" {
       }
     }
   }
+  statement {
+    sid    = "CCAllowGetRole"
+    effect = "Allow"
+    actions = [
+      "iam:GetRole"
+    ]
+    resources = [
+      "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:role${var.iam_path}${var.name_prefix}-cc-*-node-iam-role-${var.resource_tag}",
+      "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:role${var.iam_path}${var.name_prefix}-cc_node_iam_role-${var.resource_tag}"
+    ]
+  }
 }
 
 resource "aws_iam_policy" "cc_tags_policy" {
   count       = var.byo_iam == false && var.cloud_tags_enabled == true ? var.iam_count : 0
   description = "Policy which permits CCs to subscribe for tags changes"
   name        = "${var.name_prefix}-cc-${count.index + 1}-tags-${var.resource_tag}"
+  path        = var.iam_path
   policy      = data.aws_iam_policy_document.cc_tags_policy_document.json
 }
 
@@ -234,6 +258,7 @@ resource "aws_iam_role_policy_attachment" "cc_tags_attachment" {
 resource "aws_iam_role" "cc_node_iam_role" {
   count              = var.byo_iam == false ? var.iam_count : 0
   name               = var.iam_count > 1 ? "${var.name_prefix}-cc-${count.index + 1}-node-iam-role-${var.resource_tag}" : "${var.name_prefix}-cc_node_iam_role-${var.resource_tag}"
+  path               = var.iam_path
   assume_role_policy = data.aws_iam_policy_document.instance_assume_role_policy.json
 
   tags = merge(var.global_tags)
