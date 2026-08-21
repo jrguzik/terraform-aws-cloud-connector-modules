@@ -107,19 +107,27 @@ variable "target_group_arn" {
 
 variable "min_size" {
   type        = number
-  description = "Mininum number of Cloud Connectors to maintain in Autoscaling group"
+  description = "Minimum number of Cloud Connectors to maintain in Autoscaling group"
   default     = 2
+
+  validation {
+    condition = (
+      var.min_size >= 1 && var.min_size <= 16
+    )
+    error_message = "Input min_size must be set to a number between 1 and 16."
+  }
 }
 
 variable "max_size" {
   type        = number
-  description = "Maxinum number of Cloud Connectors to maintain in Autoscaling group"
+  description = "Maximum number of Cloud Connectors to maintain in Autoscaling group"
   default     = 4
+
   validation {
     condition = (
-      var.max_size >= 1 && var.max_size <= 10
+      var.max_size >= 1 && var.max_size <= 16
     )
-    error_message = "Input max_size must be set to a number between 1 and 10."
+    error_message = "Input max_size cannot exceed 16 (hard limit of 16 Cloud Connectors per group)."
   }
 }
 
@@ -164,6 +172,12 @@ variable "warm_pool_min_size" {
   type        = number
   description = "Specifies the minimum number of instances to maintain in the warm pool. This helps you to ensure that there is always a certain number of warmed instances available to handle traffic spikes. Ignored when 'warm_pool_enabled' is false"
   default     = 0
+  validation {
+    condition = (
+      var.warm_pool_min_size >= 0 && var.warm_pool_min_size <= 16
+    )
+    error_message = "Input warm_pool_min_size must be set to a number between 0 and 16."
+  }
 }
 
 variable "warm_pool_max_group_prepared_capacity" {

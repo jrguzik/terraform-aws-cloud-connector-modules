@@ -4,13 +4,73 @@ This deployment type is intended for greenfield/pov/lab purposes. It will deploy
 
 Additionally: Creates 4 Cloud Connectors (2 per subnet/AZ) routing to NAT Gateway; Gateway Load Balancer auto registers service IPs to target group with health checks; VPC Endpoint Service; 2 GWLB Endpoints (1 in each Cloud Connector subnet); workload private subnet routes pointing to the GWLB Endpoint in their same AZ
 
+---
+
+## Deployment Modes
+
+This example supports two deployment topologies, controlled by the `tgw_enabled` variable:
+
+### Mode 1 — Standard Single-VPC GWLB (default: `tgw_enabled = false`)
+
+A single VPC hosts Cloud Connectors, the GWLB, GWLB endpoints, and workload VMs. Workload subnet route tables point directly to the GWLB endpoint in their AZ for traffic inspection.
+
+**Resources created:**
+- 1 VPC (CIDR from `vpc_cidr`, default `10.1.0.0/16`)
+- Public subnets + IGW + NAT Gateways (1 per AZ)
+- CC subnets + GWLB endpoints (1 per AZ)
+- Workload subnets with routes → GWLB endpoint
+- Bastion host (public subnet)
+- Workload VMs (private subnets)
+- 4 Cloud Connectors, GWLB, VPC Endpoint Service
+
+### Mode 2 — Transit Gateway Hub-and-Spoke (`tgw_enabled = true`)
+
+Three VPCs are created: a **Hub VPC** (CC + GWLB infrastructure only, no local workloads) and two **Spoke VPCs** (workload VMs only). All spoke egress traffic is routed via a Transit Gateway to the Hub, where it is inspected by the GWLB before exiting to the internet via NAT Gateway.
+
+**Traffic path:**
+```
+Spoke Workload → TGW → Hub TGW-Attach Subnet → GWLB Endpoint → GWLB → CC → NAT GW → Internet
+```
+
+**Resources created:**
+- Hub VPC (CIDR from `hub_vpc_cidr`, default `10.0.0.0/16`):
+  - Public subnets, IGW, NAT Gateways
+  - TGW attach subnets (1 per AZ)
+  - GWLB endpoint subnets (1 per AZ, dedicated)
+  - CC subnets
+  - Bastion host
+  - 4 Cloud Connectors, GWLB, VPC Endpoint Service, GWLB Endpoints
+- Spoke 1 VPC (CIDR from `spoke_1_vpc_cidr`, default `10.1.0.0/16`):
+  - Workload subnets, bastion host, workload VMs
+  - Workload subnet routes: `0.0.0.0/0 → TGW`
+- Spoke 2 VPC (CIDR from `spoke_2_vpc_cidr`, default `10.2.0.0/16`):
+  - Same layout as Spoke 1
+- Transit Gateway with two route tables:
+  - `spoke_rt`: associated to Spoke 1 + Spoke 2 attachments; static default route → Hub attachment
+  - `hub_rt`: associated to Hub attachment; propagates spoke CIDRs for return routing
+
+> **Note:** When `tgw_enabled = true`, GWLB endpoint-based route injection into the hub's workload subnet route tables is disabled — inspection is steered via TGW attachments instead. The GWLB and GWLB endpoints are still deployed in dedicated subnets within the Hub VPC.
+
+**Key variables for TGW mode:**
+
+| Variable | Default | Description |
+|---|---|---|
+| `tgw_enabled` | `false` | Set to `true` to enable TGW Hub-and-Spoke mode |
+| `tgw_name` | `"zscc-tgw"` | Name tag for the Transit Gateway |
+| `hub_vpc_cidr` | `"10.0.0.0/16"` | CIDR for the Hub VPC |
+| `spoke_1_vpc_cidr` | `"10.1.0.0/16"` | CIDR for Spoke 1 VPC |
+| `spoke_2_vpc_cidr` | `"10.2.0.0/16"` | CIDR for Spoke 2 VPC |
+
+---
+
 ## How to deploy:
 
 ### Option 1 (guided):
 From the examples directory, run the zsec bash script that walks to all required inputs.
 - ./zsec up
 - enter "greenfield"
-- enter "base_cc_gwlb"
+- For standard GWLB: select option **3** ("Deploy multiple Cloud Connectors + Gateway Load Balancer in a new VPC")
+- For TGW Hub-and-Spoke: select option **7** ("Deploy multiple Cloud Connectors + Gateway Load Balancer + Transit Gateway Hub and Spoke in a new VPC")
 - follow the remainder of the authentication and configuration input prompts.
 - script will detect client operating system and download/run a specific version of terraform in a temporary bin directory
 - inputs will be validated and terraform init/apply will automatically exectute.
@@ -18,6 +78,8 @@ From the examples directory, run the zsec bash script that walks to all required
 
 ### Option 2 (manual):
 Modify/populate any required variable input values in base_cc_gwlb/terraform.tfvars file and save.
+
+For TGW Hub-and-Spoke mode, set `tgw_enabled = true` in `terraform.tfvars` and optionally configure `hub_vpc_cidr`, `spoke_1_vpc_cidr`, and `spoke_2_vpc_cidr` to avoid CIDR conflicts with your existing network.
 
 From base_cc_gwlb directory execute:
 - terraform init
@@ -104,6 +166,7 @@ From base_cc_gwlb directory execute:
 | <a name="input_deregistration_delay"></a> [deregistration\_delay](#input\_deregistration\_delay) | Amount time for Elastic Load Balancing to wait before changing the state of a deregistering target from draining to unused. The range is 0-3600 seconds. | `number` | `0` | no |
 | <a name="input_ebs_encryption_enabled"></a> [ebs\_encryption\_enabled](#input\_ebs\_encryption\_enabled) | true/false whether to enable EBS encryption on the root volume. Default is true | `bool` | `true` | no |
 | <a name="input_ebs_volume_type"></a> [ebs\_volume\_type](#input\_ebs\_volume\_type) | (Optional) Type of volume. Valid values include standard, gp2, gp3, io1, io2, sc1, or st1. Defaults to gp3 | `string` | `"gp3"` | no |
+| <a name="input_fips_enabled"></a> [fips\_enabled](#input\_fips\_enabled) | Enable FIPS mode for Cloud Connector provisioning. Supported values are 'False' or 'True'. | `string` | `"False"` | no |
 | <a name="input_flow_stickiness"></a> [flow\_stickiness](#input\_flow\_stickiness) | Options are (Default) 5-tuple (src ip/src port/dest ip/dest port/protocol), 3-tuple (src ip/dest ip/protocol), or 2-tuple (src ip/dest ip) | `string` | `"5-tuple"` | no |
 | <a name="input_gwlb_enabled"></a> [gwlb\_enabled](#input\_gwlb\_enabled) | Default is true. Workload/Route 53 subnet Route Tables will point to network\_interface\_id via var.cc\_service\_enis. If true, Route Tables will point to vpc\_endpoint\_id via var.gwlb\_endpoint\_ids input. | `bool` | `true` | no |
 | <a name="input_health_check_interval"></a> [health\_check\_interval](#input\_health\_check\_interval) | Interval for GWLB target group health check probing, in seconds, of Cloud Connector targets. Minimum 5 and maximum 300 seconds | `number` | `10` | no |
